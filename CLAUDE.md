@@ -68,7 +68,7 @@ Bridges 30yr macro/geopolitics knowledge to forex concepts. Not a trading platfo
 - [x] **Slice 2** — Headline Decoder (Groq text) ✓
 - [x] **Slice 2b** — Grounded Decoder (live Frankfurter + EIA data) ✓
 - [x] **Slice 3** — Hypothesis Tracker + Win/Loss chart ✓
-- [ ] **Slice 4** — Chart Companion (Gemini vision, Kite screenshot upload)
+- [ ] **Slice 4** — Chart Companion (Gemini vision, Kite screenshot upload) — spec ready
 
 ---
 
@@ -120,7 +120,7 @@ USD/INR (primary), EUR/USD, USD/JPY, GBP/USD, AUD/USD, USD/CAD, XAU/USD
 ---
 
 ## Current Status
-**Slice 3 deployed. Next: Slice 4 — Chart Companion (Gemini vision, Kite screenshot upload).**
+**Slice 3 complete and deployed. Slice 4 spec written and saved in planning chat. Next session: implement Slice 4 — Chart Companion with Gemini vision.**
 
 **Tech debt:**
 - Move shared AI types from `api/ai.ts` import into `src/types/ai.ts` (fragile relative path)
