@@ -7,9 +7,10 @@ interface Props {
 }
 
 const navItems: { label: string; page: Page }[] = [
-  { label: 'Dashboard', page: 'dashboard' },
-  { label: 'Journal',   page: 'journal'    },
-  { label: 'Decoder',   page: 'decoder'    },
+  { label: 'Dashboard',   page: 'dashboard'   },
+  { label: 'Journal',     page: 'journal'     },
+  { label: 'Decoder',     page: 'decoder'     },
+  { label: 'Performance', page: 'performance' },
 ]
 
 export function Layout({ currentPage, onNavigate, children }: Props) {

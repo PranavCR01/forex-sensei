@@ -4,8 +4,9 @@ import { Layout } from '@/components/Layout'
 import { Dashboard } from '@/pages/Dashboard'
 import { Journal } from '@/pages/Journal'
 import { HeadlineDecoder } from '@/pages/HeadlineDecoder'
+import { Performance } from '@/pages/Performance'
 
-export type Page = 'dashboard' | 'journal' | 'decoder'
+export type Page = 'dashboard' | 'journal' | 'decoder' | 'performance'
 
 export interface JournalPrefill {
   pair: string
@@ -41,6 +42,7 @@ export default function App() {
       {page === 'decoder' && (
         <HeadlineDecoder onSaveToJournal={handleSaveToJournal} />
       )}
+      {page === 'performance' && <Performance />}
     </Layout>
   )
 }

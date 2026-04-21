@@ -24,7 +24,9 @@
 - [ ] Slice 2b: How Promise.all with AbortController handles parallel fetches with graceful degradation
 - [ ] Slice 2b: Why API endpoints change and how to debug a 404 on a third-party API (check changelog, try v1 vs v2, read raw response)
 - [ ] Slice 2c: In-memory caching pattern — cache-then-fetch, TTL check, stale-on-error fallback
-- [ ] Slice 3: How to model state that changes over time (open → closed trades, win/loss tracking)
+- [x] Slice 3: How to model state that changes over time (open → closed trades, win/loss tracking)
+- [ ] Slice 3: How recharts works — ResponsiveContainer, BarChart, Cell for per-bar color, controlled data shape
+- [ ] Slice 3: Derived state vs stored state — computing win rate client-side from raw data vs storing it in the DB
 - [ ] Slice 4: What base64 encoding is and why images need it for API calls
 
 ---
@@ -65,7 +67,7 @@ Bridges 30yr macro/geopolitics knowledge to forex concepts. Not a trading platfo
 - [x] **Slice 1** — Foundation + Trade Journal ✓
 - [x] **Slice 2** — Headline Decoder (Groq text) ✓
 - [x] **Slice 2b** — Grounded Decoder (live Frankfurter + EIA data) ✓
-- [ ] **Slice 3** — Hypothesis Tracker + Win/Loss chart
+- [x] **Slice 3** — Hypothesis Tracker + Win/Loss chart ✓
 - [ ] **Slice 4** — Chart Companion (Gemini vision, Kite screenshot upload)
 
 ---
@@ -113,11 +115,12 @@ USD/INR (primary), EUR/USD, USD/JPY, GBP/USD, AUD/USD, USD/CAD, XAU/USD
 | 2026-04-20 | Slice 2b: Grounded context added — parallel Frankfurter + EIA fetches, AbortController timeouts, marketSnapshot returned alongside analysis. Vite local-api plugin built to shim serverless runtime in dev. Two API bugs fixed: Frankfurter /v2/→/v1/, EIA missing facets[series][]=RWTC was returning wrong dataset (diesel instead of WTI). Live data fetch not yet verified — next session starts here. |
 | 2026-04-20 | Slice 2b verified: Frankfurter v1 confirmed live (USD/INR=93.07, EUR/USD=1.176), EIA RWTC confirmed live (WTI=$100.72, period=2026-04-13). EIA_API_KEY added to .env.local. Pushed Slice 2+2b to GitHub and redeployed to Vercel. |
 | 2026-04-21 | Slice 2c: Replaced EIA (day-stale) with OilPriceAPI (near-live). Added 5-min in-memory WTI cache with stale-on-error fallback. Updated MarketSnapshot (wtiDate→wtiTimestamp). New footer format: "USD/INR: X · WTI: $Y/bbl (live) · fetched HH:MM". Verified locally: WTI=$89.61, USD/INR=93.07. Deployed to Vercel. |
+| 2026-04-21 | Slice 3: CloseTradeForm (expand-in-place, outcome toggle, pips, notes), TradeList updated (Close Trade button, inline form, internalRefresh pattern, exit info on closed cards), Performance page (4 stat cards, recharts BarChart with Cell colors, 3 pattern insights, trade review list with expand-to-compare). recharts v3.8.1 installed. |
 
 ---
 
 ## Current Status
-**Slice 2c deployed. WTI is now near-live via OilPriceAPI with 5-min cache. Next: spec and build Slice 3 (Hypothesis Tracker + win/loss chart).**
+**Slice 3 deployed. Next: Slice 4 — Chart Companion (Gemini vision, Kite screenshot upload).**
 
 **Tech debt:**
 - Move shared AI types from `api/ai.ts` import into `src/types/ai.ts` (fragile relative path)
