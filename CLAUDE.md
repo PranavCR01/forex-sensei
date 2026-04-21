@@ -32,8 +32,8 @@
 A personal forex learning tool for a single user (55yo, Bangalore).
 Bridges 30yr macro/geopolitics knowledge to forex concepts. Not a trading platform — a **learning + journaling** tool.
 
-**Live URL:** TBD (deploy to Vercel next)
-**Repo:** TBD
+**Live URL:** https://forex-sensei.vercel.app
+**Repo:** https://github.com/PranavCR01/forex-sensei
 
 ---
 
