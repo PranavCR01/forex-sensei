@@ -27,7 +27,10 @@
 - [x] Slice 3: How to model state that changes over time (open → closed trades, win/loss tracking)
 - [ ] Slice 3: How recharts works — ResponsiveContainer, BarChart, Cell for per-bar color, controlled data shape
 - [ ] Slice 3: Derived state vs stored state — computing win rate client-side from raw data vs storing it in the DB
-- [ ] Slice 4: What base64 encoding is and why images need it for API calls
+- [x] Slice 4: What base64 encoding is and why images need it for API calls
+- [ ] Slice 4: How multimodal AI works — sending image + text together in one API call
+- [ ] Slice 4: FileReader API — browser-native way to read local files as base64, ArrayBuffer, or text
+- [ ] Slice 4: Why base64 — binary data (images) needs text encoding to travel through JSON APIs
 
 ---
 
@@ -68,7 +71,7 @@ Bridges 30yr macro/geopolitics knowledge to forex concepts. Not a trading platfo
 - [x] **Slice 2** — Headline Decoder (Groq text) ✓
 - [x] **Slice 2b** — Grounded Decoder (live Frankfurter + EIA data) ✓
 - [x] **Slice 3** — Hypothesis Tracker + Win/Loss chart ✓
-- [ ] **Slice 4** — Chart Companion (Gemini vision, Kite screenshot upload) — spec ready
+- [x] **Slice 4** — Chart Companion (Gemini vision, Kite screenshot upload) ✓
 
 ---
 
@@ -116,11 +119,12 @@ USD/INR (primary), EUR/USD, USD/JPY, GBP/USD, AUD/USD, USD/CAD, XAU/USD
 | 2026-04-20 | Slice 2b verified: Frankfurter v1 confirmed live (USD/INR=93.07, EUR/USD=1.176), EIA RWTC confirmed live (WTI=$100.72, period=2026-04-13). EIA_API_KEY added to .env.local. Pushed Slice 2+2b to GitHub and redeployed to Vercel. |
 | 2026-04-21 | Slice 2c: Replaced EIA (day-stale) with OilPriceAPI (near-live). Added 5-min in-memory WTI cache with stale-on-error fallback. Updated MarketSnapshot (wtiDate→wtiTimestamp). New footer format: "USD/INR: X · WTI: $Y/bbl (live) · fetched HH:MM". Verified locally: WTI=$89.61, USD/INR=93.07. Deployed to Vercel. |
 | 2026-04-21 | Slice 3: CloseTradeForm (expand-in-place, outcome toggle, pips, notes), TradeList updated (Close Trade button, inline form, internalRefresh pattern, exit info on closed cards), Performance page (4 stat cards, recharts BarChart with Cell colors, 3 pattern insights, trade review list with expand-to-compare). recharts v3.8.1 installed. |
+| 2026-04-21 | Slice 4: ChartCompanion.tsx built — drag/drop upload zone, FileReader base64 conversion, Gemini 2.0 Flash vision call via /api/ai (new image branch), result card (pattern, bias, confidence, key levels, what to watch, disclaimer), Save insight to Journal pre-fill. api/ai.ts updated: ChartAnalysis type exported, GeminiApiResponse types added, handleGeminiVision() handler, main handler routes on body.image. Build passes, pushed to GitHub. |
 
 ---
 
 ## Current Status
-**Slice 3 complete and deployed. Slice 4 spec written and saved in planning chat. Next session: implement Slice 4 — Chart Companion with Gemini vision.**
+**All 4 slices complete and live. App is fully functional. Optional: Slice 5 — weekly AI summary (Gemini synthesises Rajesh's trade patterns into a weekly insight email or in-app report).**
 
 **Tech debt:**
 - Move shared AI types from `api/ai.ts` import into `src/types/ai.ts` (fragile relative path)
