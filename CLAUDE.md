@@ -19,8 +19,10 @@
 - [x] Slice 1: Why env vars have VITE_ prefix for some and not others (client vs server boundary)
 - [x] Slice 1: What Supabase RLS actually does and why it matters even for one user
 - [x] Slice 1: How Vercel serverless functions work — what a request/response cycle looks like
-- [ ] Slice 2: Why we proxy API keys through serverless instead of calling Groq directly from React
-- [ ] Slice 2: What a system prompt is and how to write one that produces consistent output
+- [x] Slice 2: Why we proxy API keys through serverless instead of calling Groq directly from React
+- [x] Slice 2: What a system prompt is and how to write one that produces consistent output (chain-of-thought + few-shot)
+- [ ] Slice 2b: How Promise.all with AbortController handles parallel fetches with graceful degradation
+- [ ] Slice 2b: Why API endpoints change and how to debug a 404 on a third-party API (check changelog, try v1 vs v2, read raw response)
 - [ ] Slice 3: How to model state that changes over time (open → closed trades, win/loss tracking)
 - [ ] Slice 4: What base64 encoding is and why images need it for API calls
 
@@ -60,7 +62,8 @@ Bridges 30yr macro/geopolitics knowledge to forex concepts. Not a trading platfo
 
 ## Slice Plan
 - [x] **Slice 1** — Foundation + Trade Journal ✓
-- [ ] **Slice 2** — Headline Decoder (Groq text)
+- [x] **Slice 2** — Headline Decoder (Groq text) ✓
+- [x] **Slice 2b** — Grounded Decoder (live Frankfurter + EIA data) ✓
 - [ ] **Slice 3** — Hypothesis Tracker + Win/Loss chart
 - [ ] **Slice 4** — Chart Companion (Gemini vision, Kite screenshot upload)
 
@@ -68,35 +71,28 @@ Bridges 30yr macro/geopolitics knowledge to forex concepts. Not a trading platfo
 
 ## Slice 1 — What Was Built
 **Stack decisions locked in this slice:**
-- Tailwind v4 (not v3) — configured via `@tailwindcss/vite` plugin, no `tailwind.config.js`
+- Tailwind v4 — configured via `@tailwindcss/vite` plugin, no `tailwind.config.js`
 - shadcn init requires `paths` alias in both `tsconfig.json` AND `tsconfig.app.json` (both need `"ignoreDeprecations": "6.0"`)
-- React 18 must be pinned (`npm install react@18 ...`) BEFORE running `npx shadcn@latest init` to avoid peer dep conflict
-- All badge/status colors use lookup objects — Tailwind v4 tree-shakes dynamically constructed class strings
+- React 18 must be pinned BEFORE `npx shadcn@latest init` to avoid peer dep conflict
+- All badge/status colors use lookup objects — Tailwind v4 tree-shakes dynamic class strings
 
-**Files created:**
-```
-src/
-  App.tsx               — useState routing (no React Router), PinGate → Layout
-  components/
-    PinGate.tsx         — 4-box PIN input, shake animation, sessionStorage auth
-    Layout.tsx          — nav header (Dashboard / Journal), sign out
-    TradeForm.tsx       — pair select, direction toggle, entry fields, Supabase insert
-    TradeList.tsx       — Supabase fetch, Tabs (All/Open/Closed), trade cards
-    ui/                 — shadcn: button card badge select textarea input tabs label
-  pages/
-    Dashboard.tsx       — welcome + 3 stat cards (Total, Open, Last Entry)
-    Journal.tsx         — TradeForm + TradeList with refreshKey bridge
-  lib/
-    supabase.ts         — createClient with env var guard (throws on missing vars)
-    utils.ts            — cn() helper (written by shadcn init)
-api/
-  ai.ts                 — Vercel Pages Router stub, returns { message: 'AI coming in Slice 2' }
-vercel.json             — /api/* rewrite rule
-.env.local.example      — template with all required keys documented
-```
+**Key files:** `PinGate.tsx`, `TradeForm.tsx`, `TradeList.tsx`, `Dashboard.tsx`, `Journal.tsx`, `Layout.tsx`, `lib/supabase.ts`, `api/ai.ts` (stub), `vercel.json`, `.env.local.example`
 
-**Supabase trades table:** created manually in dashboard — see original spec for SQL.
-**RLS policy:** `allow all using (true)` — tighten in Slice 3 before sharing URL.
+**Supabase trades table:** created manually in dashboard. **RLS:** `allow all using (true)` — tighten before sharing URL.
+
+---
+
+## Slice 2 + 2b — What Was Built
+- `api/ai.ts` — Groq handler (llama-3.3-70b-versatile), chain-of-thought + few-shot system prompt, JSON extraction by `indexOf`/`lastIndexOf`, markdown fence stripping
+- Grounded context: parallel `Promise.all` fetches — Frankfurter (forex rates) + EIA (WTI crude) — each with 3s AbortController timeout, graceful null on failure
+- Response shape: `{ analysis: DecoderAnalysis, marketSnapshot: MarketSnapshot }`
+- `HeadlineDecoder.tsx` — textarea → decode → result card (pair, direction, confidence, summary, macro_link, watch_next) + live data footer
+- "Save to Journal" — pre-fills TradeForm via `JournalPrefill` state in App.tsx + key-based remount
+- **Vite dev fix:** custom `local-api` plugin in `vite.config.ts` shims Vercel serverless runtime locally — intercepts `/api/*`, loads env from `.env.local` via `loadEnv`, executes handler via `server.ssrLoadModule`
+
+**Known working API URLs:**
+- Frankfurter: `https://api.frankfurter.dev/v1/latest` (v1, not v2)
+- EIA WTI: add `facets[series][]=RWTC` — without it returns all petroleum series, not WTI
 
 ---
 
@@ -108,11 +104,17 @@ USD/INR (primary), EUR/USD, USD/JPY, GBP/USD, AUD/USD, USD/CAD, XAU/USD
 ## Session Log
 | Date | What was done |
 |---|---|
-| 2026-04-20 | CLAUDE.md created. Slice 1 spec finalized. Stack locked. |
-| 2026-04-20 | Slice 1 fully built and tested: Vite scaffold, Tailwind v4, shadcn/ui, PinGate, TradeForm (Supabase insert confirmed), TradeList (filter tabs, live refresh), Dashboard (stat cards), /api/ai.ts stub, vercel.json, .env.local.example. Production build passing. |
+| 2026-04-20 | Slice 1 fully built and tested: Vite scaffold, Tailwind v4, shadcn/ui, PinGate, TradeForm (Supabase insert confirmed), TradeList, Dashboard, api stub, vercel.json. |
+| 2026-04-20 | Slice 2: Headline Decoder built — Groq wired, HeadlineDecoder page, Save to Journal pre-fill flow. |
+| 2026-04-20 | Slice 2b: Grounded context added — parallel Frankfurter + EIA fetches, AbortController timeouts, marketSnapshot returned alongside analysis. Vite local-api plugin built to shim serverless runtime in dev. Two API bugs fixed: Frankfurter /v2/→/v1/, EIA missing facets[series][]=RWTC was returning wrong dataset (diesel instead of WTI). Live data fetch not yet verified — next session starts here. |
+| 2026-04-20 | Slice 2b verified: Frankfurter v1 confirmed live (USD/INR=93.07, EUR/USD=1.176), EIA RWTC confirmed live (WTI=$100.72, period=2026-04-13). EIA_API_KEY added to .env.local. Pushed Slice 2+2b to GitHub and redeployed to Vercel. |
 
 ---
 
 ## Current Status
-**Slice 1 complete.**
-**Next:** Push to GitHub, deploy to Vercel, then spec Slice 2 (Headline Decoder).
+**Slice 2b verified and deployed. Next session: spec and build Slice 3 (Hypothesis Tracker + win/loss chart). Learn goal: how to model state that changes over time (open → closed trades, win/loss tracking).**
+
+**Tech debt:**
+- Move shared AI types from `api/ai.ts` import into `src/types/ai.ts` (fragile relative path)
+- Tighten Supabase RLS before sharing the live URL
+- Add EIA_API_KEY to `.env.local` (free key at eia.gov/opendata) — WTI shows null without it

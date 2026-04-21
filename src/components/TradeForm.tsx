@@ -42,12 +42,22 @@ function defaultForm() {
   }
 }
 
+interface InitialValues {
+  pair?: string
+  direction?: Direction
+  reasoning?: string
+}
+
 interface Props {
+  initialValues?: InitialValues
   onSuccess?: () => void
 }
 
-export function TradeForm({ onSuccess }: Props) {
-  const [form, setForm] = useState(defaultForm)
+export function TradeForm({ initialValues, onSuccess }: Props) {
+  const [form, setForm] = useState(() => ({
+    ...defaultForm(),
+    ...(initialValues ?? {}),
+  }))
   const [submitState, setSubmitState] = useState<SubmitState>('idle')
   const [errorMsg, setErrorMsg] = useState('')
 

@@ -13,7 +13,13 @@
       "Bash(npx tsc *)",
       "Bash(npm run *)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
-      "Bash(npm audit *)"
+      "Bash(npm audit *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\" http://localhost:5173/api/ai)",
+      "Bash(curl -s -X POST http://localhost:5173/api/ai -H \"Content-Type: application/json\" -d '{\"headline\":\"test\"}')",
+      "Bash(curl *)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(vercel *)",
+      "Bash(git add *)"
     ]
   }
 }
