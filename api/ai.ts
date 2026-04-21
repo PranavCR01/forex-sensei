@@ -269,7 +269,7 @@ async function callGroqVision(image: string, mimeType: string): Promise<ChartAna
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model:       'meta-llama/llama-4-maverick-17b-128e-instruct',
+      model:       'llama-4-maverick-17b-128e-instruct',
       temperature: 0.2,
       max_tokens:  800,
       messages: [{
