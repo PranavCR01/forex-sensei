@@ -258,7 +258,7 @@ async function handleGeminiVision(
     return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server' })
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`
 
   const parts: GeminiPart[] = [
     { text: 'Analyze this forex chart:' },
