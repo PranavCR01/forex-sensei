@@ -11,6 +11,7 @@ const navItems: { label: string; page: Page }[] = [
   { label: 'Journal',     page: 'journal'     },
   { label: 'Decoder',     page: 'decoder'     },
   { label: 'Performance', page: 'performance' },
+  { label: 'Charts',      page: 'charts'      },
 ]
 
 export function Layout({ currentPage, onNavigate, children }: Props) {

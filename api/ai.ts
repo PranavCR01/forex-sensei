@@ -52,12 +52,36 @@ interface OilPriceApiResponse {
   }
 }
 
+export interface ChartAnalysis {
+  pair:                 string
+  timeframe:            string
+  pattern:              string
+  pattern_simple:       string
+  current_price_action: string
+  key_levels:           string[]
+  bias:                 'bullish' | 'bearish' | 'neutral'
+  what_to_watch:        string
+  confidence:           'high' | 'medium' | 'low'
+  disclaimer:           string
+}
+
 interface GroqChoice {
   message: { content: string }
 }
 
 interface GroqApiResponse {
   choices: GroqChoice[]
+}
+
+interface GeminiPart {
+  text?: string
+  inline_data?: { mime_type: string; data: string }
+}
+
+interface GeminiApiResponse {
+  candidates: Array<{
+    content: { parts: Array<{ text: string }> }
+  }>
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -203,6 +227,92 @@ Now analyze the headline given by the user using the live market data provided. 
   "what_to_watch": "1 concrete thing to monitor next"
 }`
 
+// ─── Gemini system prompt ─────────────────────────────────────────────────────
+
+const GEMINI_SYSTEM_PROMPT = `You are a forex chart analysis assistant helping a 55-year-old Indian businessman named Rajesh who is learning forex trading. He has 30 years of experience in electrical infrastructure — transformers, high-tension cables, RMUs — and understands global macro well but is new to technical chart analysis.
+
+Analyze the forex chart screenshot provided. Respond in this exact JSON format:
+{
+  "pair": "currency pair if visible e.g. USD/INR, or 'Unknown'",
+  "timeframe": "timeframe if visible e.g. '1H', '4H', 'Daily', or ''",
+  "pattern": "name of the chart pattern e.g. 'Support and Resistance', 'Uptrend', 'Head and Shoulders'",
+  "pattern_simple": "explain the pattern in one sentence as if explaining to someone who understands electrical load curves but not candlesticks",
+  "current_price_action": "what is price doing right now in the chart",
+  "key_levels": ["level 1 description", "level 2 description"],
+  "bias": "bullish | bearish | neutral",
+  "what_to_watch": "one concrete thing to monitor on this chart",
+  "confidence": "high | medium | low",
+  "disclaimer": "This is educational analysis only, not financial advice."
+}
+Respond with JSON only. No preamble, no markdown backticks.`
+
+// ─── Gemini vision handler ────────────────────────────────────────────────────
+
+async function handleGeminiVision(
+  req: VercelRequest,
+  res: VercelResponse,
+): Promise<VercelResponse> {
+  const body     = req.body as { image: string; mimeType: string }
+  const geminiKey = process.env.GEMINI_API_KEY
+  if (!geminiKey) {
+    return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server' })
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`
+
+  const parts: GeminiPart[] = [
+    { text: 'Analyze this forex chart:' },
+    { inline_data: { mime_type: body.mimeType, data: body.image } },
+  ]
+
+  let geminiRes: Response
+  try {
+    geminiRes = await fetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents:          [{ parts }],
+        system_instruction: { parts: [{ text: GEMINI_SYSTEM_PROMPT }] },
+        generation_config: { temperature: 0.2, max_output_tokens: 800 },
+      }),
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Network error reaching Gemini'
+    console.error('[ai] Gemini fetch error:', msg)
+    return res.status(502).json({ error: msg })
+  }
+
+  if (!geminiRes.ok) {
+    const text = await geminiRes.text()
+    console.error('[ai] Gemini HTTP error:', geminiRes.status, text)
+    return res.status(502).json({ error: `Gemini returned ${geminiRes.status}: ${text}` })
+  }
+
+  const data    = (await geminiRes.json()) as GeminiApiResponse
+  const content = data.candidates[0]?.content?.parts[0]?.text ?? ''
+
+  if (!content) {
+    return res.status(502).json({ error: 'Empty response from Gemini' })
+  }
+
+  const stripped  = content.replace(/^```(?:json)?\n?/im, '').replace(/\n?```$/im, '').trim()
+  const jsonStart = stripped.indexOf('{')
+  const jsonEnd   = stripped.lastIndexOf('}')
+
+  if (jsonStart === -1 || jsonEnd < jsonStart) {
+    console.error('[ai] No JSON from Gemini:', stripped.slice(0, 300))
+    return res.status(502).json({ error: 'Gemini did not return a JSON object', raw: stripped.slice(0, 300) })
+  }
+
+  try {
+    const analysis = JSON.parse(stripped.slice(jsonStart, jsonEnd + 1)) as ChartAnalysis
+    return res.status(200).json(analysis)
+  } catch (err) {
+    console.error('[ai] Gemini JSON parse failed:', err)
+    return res.status(502).json({ error: 'Failed to parse Gemini JSON' })
+  }
+}
+
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -210,10 +320,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const body = req.body as { headline?: string }
+  const body = req.body as { headline?: string; image?: string; mimeType?: string }
+
+  if (body?.image) {
+    return handleGeminiVision(req, res)
+  }
+
   const headline = body?.headline?.trim()
   if (!headline) {
-    return res.status(400).json({ error: 'headline is required' })
+    return res.status(400).json({ error: 'headline or image is required' })
   }
 
   const groqKey = process.env.GROQ_API_KEY

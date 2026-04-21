@@ -5,8 +5,9 @@ import { Dashboard } from '@/pages/Dashboard'
 import { Journal } from '@/pages/Journal'
 import { HeadlineDecoder } from '@/pages/HeadlineDecoder'
 import { Performance } from '@/pages/Performance'
+import { ChartCompanion } from '@/pages/ChartCompanion'
 
-export type Page = 'dashboard' | 'journal' | 'decoder' | 'performance'
+export type Page = 'dashboard' | 'journal' | 'decoder' | 'performance' | 'charts'
 
 export interface JournalPrefill {
   pair: string
@@ -43,6 +44,9 @@ export default function App() {
         <HeadlineDecoder onSaveToJournal={handleSaveToJournal} />
       )}
       {page === 'performance' && <Performance />}
+      {page === 'charts' && (
+        <ChartCompanion onSaveToJournal={handleSaveToJournal} />
+      )}
     </Layout>
   )
 }
