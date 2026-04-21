@@ -248,68 +248,104 @@ Respond with JSON only. No preamble, no markdown backticks.`
 
 // ─── Gemini vision handler ────────────────────────────────────────────────────
 
+function parseChartJson(raw: string): ChartAnalysis {
+  const stripped  = raw.replace(/^```(?:json)?\n?/im, '').replace(/\n?```$/im, '').trim()
+  const jsonStart = stripped.indexOf('{')
+  const jsonEnd   = stripped.lastIndexOf('}')
+  if (jsonStart === -1 || jsonEnd < jsonStart) {
+    throw new Error(`No JSON object in response: ${stripped.slice(0, 200)}`)
+  }
+  return JSON.parse(stripped.slice(jsonStart, jsonEnd + 1)) as ChartAnalysis
+}
+
+async function callGroqVision(image: string, mimeType: string): Promise<ChartAnalysis> {
+  const groqKey = process.env.GROQ_API_KEY
+  if (!groqKey) throw new Error('GROQ_API_KEY is not configured on the server')
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method:  'POST',
+    headers: {
+      Authorization:  `Bearer ${groqKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model:       'meta-llama/llama-4-maverick-17b-128e-instruct',
+      temperature: 0.2,
+      max_tokens:  800,
+      messages: [{
+        role:    'user',
+        content: [
+          { type: 'text',      text: GEMINI_SYSTEM_PROMPT + '\n\nAnalyze this forex chart:' },
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${image}` } },
+        ],
+      }],
+    }),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Groq vision returned ${res.status}: ${text.slice(0, 200)}`)
+  }
+
+  const data    = (await res.json()) as GroqApiResponse
+  const content = data.choices[0]?.message?.content ?? ''
+  if (!content) throw new Error('Empty response from Groq vision')
+  return parseChartJson(content)
+}
+
 async function handleGeminiVision(
   req: VercelRequest,
   res: VercelResponse,
 ): Promise<VercelResponse> {
-  const body     = req.body as { image: string; mimeType: string }
+  const { image, mimeType } = req.body as { image: string; mimeType: string }
   const geminiKey = process.env.GEMINI_API_KEY
-  if (!geminiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server' })
+
+  if (geminiKey) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`
+    const parts: GeminiPart[] = [
+      { text: 'Analyze this forex chart:' },
+      { inline_data: { mime_type: mimeType, data: image } },
+    ]
+
+    let geminiRes: Response | null = null
+    try {
+      geminiRes = await fetch(url, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents:           [{ parts }],
+          system_instruction: { parts: [{ text: GEMINI_SYSTEM_PROMPT }] },
+          generation_config:  { temperature: 0.2, max_output_tokens: 800 },
+        }),
+      })
+    } catch (err) {
+      console.error('[ai] Gemini network error, falling back to Groq vision:', err)
+    }
+
+    if (geminiRes && geminiRes.ok) {
+      const data    = (await geminiRes.json()) as GeminiApiResponse
+      const content = data.candidates[0]?.content?.parts[0]?.text ?? ''
+      try {
+        const analysis = parseChartJson(content)
+        return res.status(200).json(analysis)
+      } catch (err) {
+        console.error('[ai] Gemini JSON parse failed, falling back to Groq vision:', err)
+      }
+    } else if (geminiRes) {
+      console.error('[ai] Gemini returned', geminiRes.status, '— falling back to Groq vision')
+    }
+  } else {
+    console.log('[ai] No GEMINI_API_KEY — using Groq vision directly')
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`
-
-  const parts: GeminiPart[] = [
-    { text: 'Analyze this forex chart:' },
-    { inline_data: { mime_type: body.mimeType, data: body.image } },
-  ]
-
-  let geminiRes: Response
+  // Groq vision fallback
   try {
-    geminiRes = await fetch(url, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents:          [{ parts }],
-        system_instruction: { parts: [{ text: GEMINI_SYSTEM_PROMPT }] },
-        generation_config: { temperature: 0.2, max_output_tokens: 800 },
-      }),
-    })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Network error reaching Gemini'
-    console.error('[ai] Gemini fetch error:', msg)
-    return res.status(502).json({ error: msg })
-  }
-
-  if (!geminiRes.ok) {
-    const text = await geminiRes.text()
-    console.error('[ai] Gemini HTTP error:', geminiRes.status, text)
-    return res.status(502).json({ error: `Gemini returned ${geminiRes.status}: ${text}` })
-  }
-
-  const data    = (await geminiRes.json()) as GeminiApiResponse
-  const content = data.candidates[0]?.content?.parts[0]?.text ?? ''
-
-  if (!content) {
-    return res.status(502).json({ error: 'Empty response from Gemini' })
-  }
-
-  const stripped  = content.replace(/^```(?:json)?\n?/im, '').replace(/\n?```$/im, '').trim()
-  const jsonStart = stripped.indexOf('{')
-  const jsonEnd   = stripped.lastIndexOf('}')
-
-  if (jsonStart === -1 || jsonEnd < jsonStart) {
-    console.error('[ai] No JSON from Gemini:', stripped.slice(0, 300))
-    return res.status(502).json({ error: 'Gemini did not return a JSON object', raw: stripped.slice(0, 300) })
-  }
-
-  try {
-    const analysis = JSON.parse(stripped.slice(jsonStart, jsonEnd + 1)) as ChartAnalysis
+    const analysis = await callGroqVision(image, mimeType)
     return res.status(200).json(analysis)
   } catch (err) {
-    console.error('[ai] Gemini JSON parse failed:', err)
-    return res.status(502).json({ error: 'Failed to parse Gemini JSON' })
+    const msg = err instanceof Error ? err.message : 'Vision analysis failed'
+    console.error('[ai] Groq vision fallback failed:', msg)
+    return res.status(502).json({ error: msg })
   }
 }
 
