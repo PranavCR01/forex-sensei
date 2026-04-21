@@ -142,9 +142,11 @@ export function HeadlineDecoder({ onSaveToJournal }: Props) {
 
             <div className="pt-1 border-t border-border">
               <p className="text-xs text-muted-foreground">
-                Analysis grounded on live data fetched at {formatTime(m.fetchedAt)}
-                {m.usdInr   != null && ` — USD/INR: ${m.usdInr.toFixed(2)}`}
-                {m.wtiPrice != null && `, WTI: $${m.wtiPrice.toFixed(2)}/bbl`}
+                {[
+                  m.usdInr   != null ? `USD/INR: ${m.usdInr.toFixed(2)}`        : null,
+                  m.wtiPrice != null ? `WTI: $${m.wtiPrice.toFixed(2)}/bbl (live)` : null,
+                  `fetched ${formatTime(m.fetchedAt)}`,
+                ].filter(Boolean).join(' · ')}
               </p>
             </div>
 

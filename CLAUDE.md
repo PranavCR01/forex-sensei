@@ -23,6 +23,7 @@
 - [x] Slice 2: What a system prompt is and how to write one that produces consistent output (chain-of-thought + few-shot)
 - [ ] Slice 2b: How Promise.all with AbortController handles parallel fetches with graceful degradation
 - [ ] Slice 2b: Why API endpoints change and how to debug a 404 on a third-party API (check changelog, try v1 vs v2, read raw response)
+- [ ] Slice 2c: In-memory caching pattern — cache-then-fetch, TTL check, stale-on-error fallback
 - [ ] Slice 3: How to model state that changes over time (open → closed trades, win/loss tracking)
 - [ ] Slice 4: What base64 encoding is and why images need it for API calls
 
@@ -92,7 +93,10 @@ Bridges 30yr macro/geopolitics knowledge to forex concepts. Not a trading platfo
 
 **Known working API URLs:**
 - Frankfurter: `https://api.frankfurter.dev/v1/latest` (v1, not v2)
-- EIA WTI: add `facets[series][]=RWTC` — without it returns all petroleum series, not WTI
+- OilPriceAPI WTI: `https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD` (near-live, ~5min delay)
+- EIA WTI: deprecated — switched to OilPriceAPI; EIA was day-stale and required `facets[series][]=RWTC`
+
+**Env vars (server-side, no VITE_ prefix):** `GROQ_API_KEY`, `OIL_PRICE_API_KEY`
 
 ---
 
@@ -108,13 +112,13 @@ USD/INR (primary), EUR/USD, USD/JPY, GBP/USD, AUD/USD, USD/CAD, XAU/USD
 | 2026-04-20 | Slice 2: Headline Decoder built — Groq wired, HeadlineDecoder page, Save to Journal pre-fill flow. |
 | 2026-04-20 | Slice 2b: Grounded context added — parallel Frankfurter + EIA fetches, AbortController timeouts, marketSnapshot returned alongside analysis. Vite local-api plugin built to shim serverless runtime in dev. Two API bugs fixed: Frankfurter /v2/→/v1/, EIA missing facets[series][]=RWTC was returning wrong dataset (diesel instead of WTI). Live data fetch not yet verified — next session starts here. |
 | 2026-04-20 | Slice 2b verified: Frankfurter v1 confirmed live (USD/INR=93.07, EUR/USD=1.176), EIA RWTC confirmed live (WTI=$100.72, period=2026-04-13). EIA_API_KEY added to .env.local. Pushed Slice 2+2b to GitHub and redeployed to Vercel. |
+| 2026-04-21 | Slice 2c: Replaced EIA (day-stale) with OilPriceAPI (near-live). Added 5-min in-memory WTI cache with stale-on-error fallback. Updated MarketSnapshot (wtiDate→wtiTimestamp). New footer format: "USD/INR: X · WTI: $Y/bbl (live) · fetched HH:MM". Verified locally: WTI=$89.61, USD/INR=93.07. Deployed to Vercel. |
 
 ---
 
 ## Current Status
-**Slice 2b verified and deployed. Next session: spec and build Slice 3 (Hypothesis Tracker + win/loss chart). Learn goal: how to model state that changes over time (open → closed trades, win/loss tracking).**
+**Slice 2c deployed. WTI is now near-live via OilPriceAPI with 5-min cache. Next: spec and build Slice 3 (Hypothesis Tracker + win/loss chart).**
 
 **Tech debt:**
 - Move shared AI types from `api/ai.ts` import into `src/types/ai.ts` (fragile relative path)
 - Tighten Supabase RLS before sharing the live URL
-- Add EIA_API_KEY to `.env.local` (free key at eia.gov/opendata) — WTI shows null without it

@@ -1,19 +1,30 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-// GROQ_API_KEY and EIA_API_KEY have no VITE_ prefix — they never leave the server.
+// GROQ_API_KEY and OIL_PRICE_API_KEY have no VITE_ prefix — they never leave the server.
 // Vite only exposes VITE_* vars to the browser bundle; plain vars are server-only.
+
+// ─── WTI cache ────────────────────────────────────────────────────────────────
+// Persists across warm invocations within the same Vercel function instance.
+// Cold starts reset it — each cold start makes one fresh OilPriceAPI call.
+
+let wtiCache: { price: number | null; wtiTimestamp: string | null; timestamp: number } = {
+  price:        null,
+  wtiTimestamp: null,
+  timestamp:    0,
+}
+const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface MarketSnapshot {
-  usdInr:   number | null
-  eurUsd:   number | null
-  usdJpy:   number | null
-  usdCad:   number | null
-  usdAud:   number | null
-  wtiPrice: number | null
-  wtiDate:  string | null
-  fetchedAt: string
+  usdInr:        number | null
+  eurUsd:        number | null
+  usdJpy:        number | null
+  usdCad:        number | null
+  usdAud:        number | null
+  wtiPrice:      number | null
+  wtiTimestamp:  string | null
+  fetchedAt:     string
 }
 
 export interface DecoderAnalysis {
@@ -34,14 +45,10 @@ interface FrankfurterResponse {
   rates: Record<string, number>
 }
 
-interface EiaDataPoint {
-  period: string
-  value:  number | string | null
-}
-
-interface EiaResponse {
-  response: {
-    data: EiaDataPoint[]
+interface OilPriceApiResponse {
+  data: {
+    price:     number | null
+    timestamp: string | null
   }
 }
 
@@ -88,22 +95,33 @@ async function fetchFrankfurterEur(): Promise<Partial<MarketSnapshot>> {
   return { eurUsd: data.rates['USD'] ?? null }
 }
 
-async function fetchEia(apiKey: string): Promise<Partial<MarketSnapshot>> {
-  const url =
-    `https://api.eia.gov/v2/petroleum/pri/spt/data/` +
-    `?api_key=${apiKey}&frequency=daily&data[0]=value&facets[series][]=RWTC` +
-    `&sort[0][column]=period&sort[0][direction]=desc&offset=0&length=1`
-  const res = await fetchWithTimeout(url)
-  if (!res.ok) return {}
-  const data = (await res.json()) as EiaResponse
-  const latest = data.response?.data?.[0]
-  if (!latest) return {}
-  // EIA returns "--" as a string on days with no data — parse defensively
-  const raw = latest.value
-  const price = typeof raw === 'number' ? raw : parseFloat(String(raw ?? ''))
-  return {
-    wtiPrice: Number.isFinite(price) ? price : null,
-    wtiDate:  latest.period ?? null,
+async function fetchWTIPrice(): Promise<number | null> {
+  if (Date.now() - wtiCache.timestamp < CACHE_TTL && wtiCache.price !== null) {
+    console.log('WTI cache hit')
+    return wtiCache.price
+  }
+  try {
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), 3000)
+    const res = await fetch(
+      'https://api.oilpriceapi.com/v1/prices/latest?by_code=WTI_USD',
+      {
+        headers: {
+          Authorization:  `Token ${process.env.OIL_PRICE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      },
+    )
+    const data = (await res.json()) as OilPriceApiResponse
+    const price        = data?.data?.price        ?? null
+    const wtiTimestamp = data?.data?.timestamp    ?? new Date().toISOString()
+    if (price !== null) {
+      wtiCache = { price, wtiTimestamp, timestamp: Date.now() }
+    }
+    return price
+  } catch {
+    return wtiCache.price  // stale cache on error — better than null
   }
 }
 
@@ -113,7 +131,7 @@ function fmt(n: number | null, decimals = 2): string {
 
 function buildMarketContext(s: MarketSnapshot): string {
   const oil = s.wtiPrice != null
-    ? `$${s.wtiPrice.toFixed(2)}/barrel (as of ${s.wtiDate})`
+    ? `$${s.wtiPrice}/barrel (live, ~5min delay)`
     : 'unavailable'
 
   return `LIVE MARKET DATA (fetched at ${s.fetchedAt}):
@@ -204,23 +222,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // ── Step 1: fetch live market data in parallel, fail gracefully ─────────────
-  const eiaKey = process.env.EIA_API_KEY
 
-  const [fxUsd, fxEur, eia] = await Promise.all([
+  const [fxUsd, fxEur, wtiPrice] = await Promise.all([
     fetchFrankfurterUsd().catch((): Partial<MarketSnapshot> => ({})),
     fetchFrankfurterEur().catch((): Partial<MarketSnapshot> => ({})),
-    eiaKey ? fetchEia(eiaKey).catch((): Partial<MarketSnapshot> => ({})) : Promise.resolve<Partial<MarketSnapshot>>({}),
+    fetchWTIPrice().catch((): number | null => wtiCache.price),
   ])
 
   const snapshot: MarketSnapshot = {
-    usdInr:    fxUsd.usdInr    ?? null,
-    eurUsd:    fxEur.eurUsd    ?? null,
-    usdJpy:    fxUsd.usdJpy    ?? null,
-    usdCad:    fxUsd.usdCad    ?? null,
-    usdAud:    fxUsd.usdAud    ?? null,
-    wtiPrice:  eia.wtiPrice    ?? null,
-    wtiDate:   eia.wtiDate     ?? null,
-    fetchedAt: new Date().toISOString(),
+    usdInr:       fxUsd.usdInr   ?? null,
+    eurUsd:       fxEur.eurUsd   ?? null,
+    usdJpy:       fxUsd.usdJpy   ?? null,
+    usdCad:       fxUsd.usdCad   ?? null,
+    usdAud:       fxUsd.usdAud   ?? null,
+    wtiPrice:     wtiPrice        ?? null,
+    wtiTimestamp: wtiCache.wtiTimestamp,
+    fetchedAt:    new Date().toISOString(),
   }
 
   // ── Step 2: build grounded context ─────────────────────────────────────────
