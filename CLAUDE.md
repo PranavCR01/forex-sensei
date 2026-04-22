@@ -126,11 +126,12 @@ USD/INR (primary), EUR/USD, USD/JPY, GBP/USD, AUD/USD, USD/CAD, XAU/USD
 | 2026-04-21 | News grounding v1: Finnhub general news API integrated. fetchMarketNews() pulls 5 latest headlines with "Nh ago" timestamps, 15-min cache, 3s AbortController. Added to Promise.all alongside FX/WTI (no latency cost). Injected into marketContext and SYSTEM_PROMPT IMPORTANT instruction. MarketSnapshot.newsHeadlines[] added. HeadlineDecoder: collapsible "News context used (N headlines from Finnhub + NewsData.io)" toggle with ChevronDown/Up icons. |
 | 2026-04-21 | News grounding v2: Added NewsData.io targeted search alongside Finnhub. fetchTargetedNews() runs two parallel searches per decode — user's headline keywords (first 5 words) + fixed "India rupee RBI forex" query. 30-min per-headline cache keyed by hashHeadline(). Merged into one allHeadlines array with [Finnhub]/[NewsData] source labels. SYSTEM_PROMPT IMPORTANT updated to weight [NewsData] more for India-specific topics. |
 | 2026-04-21 | News grounding v3 (temporal weighting): Fetch functions now return { text, hoursAgo } objects. Merged array sorted ascending by hoursAgo (newest first in prompt), filtered to hoursAgo <= 48 (stale news dropped). SYSTEM_PROMPT instructs Groq to weight <6h headlines heavily and treat 24h+ as background context only. NEWSDATA_API_KEY and FINNHUB_API_KEY added to Vercel env vars. |
+| 2026-04-21 | Onboarding tour: intro.js installed, CSS imported in index.css, OnboardingTour.tsx (8 steps, all 5 sections, auto-start on first login via localStorage flag, skip/exit marks complete). Layout.tsx: data-tour attrs on all nav buttons + "Guided Tour" button (replay). App.tsx: showTour state lazy-initialized from localStorage. Dashboard.tsx: greeting fixed to "Rajesh", Quick Guide refresher card added. Build clean, pushed to GitHub. |
 
 ---
 
 ## Current Status
-**All 4 slices complete. News grounding live with Finnhub + NewsData.io + temporal weighting. App ready for Rajesh to use daily. Optional Slice 5: weekly AI insight report.**
+**All 4 slices complete + onboarding tour live. App fully ready for Rajesh. Optional Slice 5: weekly AI insight report.**
 
 **Tech debt:**
 - Move shared AI types from `api/ai.ts` import into `src/types/ai.ts` (fragile relative path)
