@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logEvent } from '@/lib/analytics'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,12 +21,14 @@ function today(): string {
 }
 
 interface Props {
-  tradeId: string
-  onCancel: () => void
+  tradeId:   string
+  pair:      string
+  direction: string
+  onCancel:  () => void
   onSuccess: () => void
 }
 
-export function CloseTradeForm({ tradeId, onCancel, onSuccess }: Props) {
+export function CloseTradeForm({ tradeId, pair, direction, onCancel, onSuccess }: Props) {
   const [exitPrice, setExitPrice] = useState('')
   const [exitDate, setExitDate]   = useState(today())
   const [outcome, setOutcome]     = useState<Outcome>('win')
@@ -57,6 +60,12 @@ export function CloseTradeForm({ tradeId, onCancel, onSuccess }: Props) {
       return
     }
 
+    logEvent('trade_closed', {
+      pair,
+      direction,
+      outcome,
+      pips: pips ? parseFloat(pips) : null,
+    })
     setState('idle')
     onSuccess()
   }

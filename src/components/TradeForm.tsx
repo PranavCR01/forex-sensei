@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { logEvent } from '@/lib/analytics'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -82,6 +83,7 @@ export function TradeForm({ initialValues, onSuccess }: Props) {
     }
 
     setSubmitState('success')
+    logEvent('trade_logged', { pair: form.pair, direction: form.direction })
     setForm(defaultForm())
     onSuccess?.()
     setTimeout(() => setSubmitState('idle'), 3000)

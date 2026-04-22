@@ -1,3 +1,4 @@
+import logo from '@/assets/logo.svg'
 import type { Page } from '@/App'
 
 interface Props {
@@ -26,9 +27,10 @@ export function Layout({ currentPage, onNavigate, onStartTour, children }: Props
       <header className="border-b border-border">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <span className="font-semibold text-sm tracking-tight text-foreground">
+            <div className="flex items-center gap-2 font-medium text-sm text-foreground">
+              <img src={logo} alt="Forex Sensei" className="w-6 h-6" />
               forex-sensei
-            </span>
+            </div>
             <nav className="flex gap-1">
               {navItems.map(({ label, page }) => (
                 <button

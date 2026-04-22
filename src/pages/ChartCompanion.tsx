@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { Clock } from 'lucide-react'
+import { logEvent } from '@/lib/analytics'
 import type { ChartAnalysis, ChartVisionResponse } from '../../api/ai'
 import type { JournalPrefill } from '@/App'
 import { Button } from '@/components/ui/button'
@@ -103,7 +104,17 @@ export function ChartCompanion({ onSaveToJournal }: Props) {
       }
 
       const data = (await res.json()) as ChartVisionResponse | ApiError
-      isError(data) ? setError(data.error) : setResult(data)
+      if (isError(data)) {
+        setError(data.error)
+      } else {
+        setResult(data)
+        logEvent('chart_uploaded', {
+          pattern:    data.analysis.pattern,
+          bias:       data.analysis.bias,
+          confidence: data.analysis.confidence,
+          fromCache:  data.fromCache,
+        })
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error')
     } finally {

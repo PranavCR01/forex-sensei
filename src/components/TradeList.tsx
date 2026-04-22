@@ -183,6 +183,8 @@ export function TradeList({ refreshKey = 0 }: Props) {
             {isExpanded && (
               <CloseTradeForm
                 tradeId={trade.id}
+                pair={trade.pair}
+                direction={trade.direction}
                 onCancel={() => setExpandedId(null)}
                 onSuccess={handleCloseSuccess}
               />

@@ -1,5 +1,6 @@
 import introJs from 'intro.js'
 import { useEffect } from 'react'
+import { logEvent } from '@/lib/analytics'
 
 interface Props {
   onComplete: () => void
@@ -73,6 +74,7 @@ export function OnboardingTour({ onComplete }: Props) {
     })
 
     tour.oncomplete(() => {
+      logEvent('tour_completed')
       localStorage.setItem('tourCompleted', 'true')
       onComplete()
     })
@@ -82,6 +84,7 @@ export function OnboardingTour({ onComplete }: Props) {
       onComplete()
     })
 
+    logEvent('tour_started')
     tour.start()
 
     return () => { tour.exit() }

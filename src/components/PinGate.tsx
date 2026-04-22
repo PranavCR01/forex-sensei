@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import logo from '@/assets/logo.svg'
 
 // VITE_APP_PIN is embedded into the client bundle by Vite at build time.
 // Anyone with browser DevTools → Sources can read this value in plain text.
@@ -53,12 +54,15 @@ export function PinGate({ onAuth }: Props) {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="flex flex-col items-center gap-8">
-        <div className="text-center space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            forex-sensei
-          </h1>
-          <p className="text-sm text-muted-foreground">Enter your PIN to continue</p>
+        <div className="flex flex-col items-center gap-3 mb-2">
+          <img src={logo} alt="Forex Sensei" className="w-12 h-12" />
+          <div className="text-[22px] font-medium text-foreground">forex-sensei</div>
+          <div className="text-sm text-muted-foreground text-center">
+            Your personal forex learning companion
+          </div>
         </div>
+
+        <p className="text-sm text-muted-foreground text-center">Enter your PIN to continue</p>
 
         <div className={`flex gap-3 ${shaking ? 'animate-shake' : ''}`}>
           {digits.map((d, i) => (

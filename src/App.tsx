@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { logEvent } from '@/lib/analytics'
 import { PinGate } from '@/components/PinGate'
 import { Layout } from '@/components/Layout'
 import { OnboardingTour } from '@/components/OnboardingTour'
@@ -26,6 +27,11 @@ export default function App() {
     () => localStorage.getItem('tourCompleted') !== 'true'
   )
 
+  function handleNavigate(newPage: Page) {
+    logEvent('page_viewed', { page: newPage })
+    setPage(newPage)
+  }
+
   function handleSaveToJournal(prefill: JournalPrefill) {
     setJournalPrefill(prefill)
     setPage('journal')
@@ -36,7 +42,7 @@ export default function App() {
   }
 
   return (
-    <Layout currentPage={page} onNavigate={setPage} onStartTour={() => setShowTour(true)}>
+    <Layout currentPage={page} onNavigate={handleNavigate} onStartTour={() => setShowTour(true)}>
       {showTour && <OnboardingTour onComplete={() => setShowTour(false)} />}
       {page === 'dashboard' && <Dashboard />}
       {page === 'journal' && (

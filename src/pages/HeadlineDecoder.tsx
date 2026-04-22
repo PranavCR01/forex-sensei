@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import { logEvent } from '@/lib/analytics'
 import type { DecoderResponse, DecoderAnalysis, MarketSnapshot } from '../../api/ai'
 import type { JournalPrefill } from '@/App'
 import { Button } from '@/components/ui/button'
@@ -70,7 +71,17 @@ export function HeadlineDecoder({ onSaveToJournal }: Props) {
       }
 
       const data = (await res.json()) as ApiResponse
-      isError(data) ? setError(data.error) : setResult(data)
+      if (isError(data)) {
+        setError(data.error)
+      } else {
+        setResult(data)
+        logEvent('headline_decoded', {
+          pair:       data.analysis.pair,
+          direction:  data.analysis.direction,
+          confidence: data.analysis.confidence,
+          newsCount:  data.marketSnapshot.newsHeadlines.length,
+        })
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error')
     } finally {
