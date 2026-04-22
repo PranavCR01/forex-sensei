@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { DecoderResponse, DecoderAnalysis, MarketSnapshot } from '../../api/ai'
 import type { JournalPrefill } from '@/App'
 import { Button } from '@/components/ui/button'
@@ -38,16 +39,18 @@ interface Props {
 }
 
 export function HeadlineDecoder({ onSaveToJournal }: Props) {
-  const [headline, setHeadline] = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [result, setResult]     = useState<DecoderResponse | null>(null)
-  const [error, setError]       = useState('')
+  const [headline, setHeadline]     = useState('')
+  const [loading, setLoading]       = useState(false)
+  const [result, setResult]         = useState<DecoderResponse | null>(null)
+  const [error, setError]           = useState('')
+  const [newsExpanded, setNewsExpanded] = useState(false)
 
   async function handleDecode() {
     if (!headline.trim()) return
     setLoading(true)
     setError('')
     setResult(null)
+    setNewsExpanded(false)
 
     try {
       const res = await fetch('/api/ai', {
@@ -140,14 +143,39 @@ export function HeadlineDecoder({ onSaveToJournal }: Props) {
               <p className="text-sm text-muted-foreground">{a.what_to_watch}</p>
             </div>
 
-            <div className="pt-1 border-t border-border">
+            <div className="pt-1 border-t border-border space-y-2">
               <p className="text-xs text-muted-foreground">
                 {[
-                  m.usdInr   != null ? `USD/INR: ${m.usdInr.toFixed(2)}`        : null,
+                  m.usdInr   != null ? `USD/INR: ${m.usdInr.toFixed(2)}`           : null,
                   m.wtiPrice != null ? `WTI: $${m.wtiPrice.toFixed(2)}/bbl (live)` : null,
                   `fetched ${formatTime(m.fetchedAt)}`,
                 ].filter(Boolean).join(' · ')}
               </p>
+
+              {/* News context toggle */}
+              {m.newsHeadlines.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setNewsExpanded(v => !v)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {newsExpanded
+                      ? <ChevronUp className="h-3 w-3" />
+                      : <ChevronDown className="h-3 w-3" />
+                    }
+                    News context used ({m.newsHeadlines.length} headlines)
+                  </button>
+                  {newsExpanded && (
+                    <ol className="mt-2 space-y-1 pl-1">
+                      {m.newsHeadlines.map((h, i) => (
+                        <li key={i} className="text-xs text-muted-foreground/70 leading-snug">
+                          {i + 1}. {h}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              )}
             </div>
 
             <Button variant="outline" size="sm" onClick={handleSave}>

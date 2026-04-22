@@ -14,6 +14,40 @@ let wtiCache: { price: number | null; wtiTimestamp: string | null; timestamp: nu
 }
 const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 
+// ─── News cache ───────────────────────────────────────────────────────────────
+// 15-min TTL — news changes often enough that stale data misleads the model.
+
+let newsCache: { headlines: string[]; timestamp: number } = {
+  headlines: [],
+  timestamp: 0,
+}
+const NEWS_CACHE_TTL = 15 * 60 * 1000
+
+interface FinnhubNewsItem {
+  headline: string
+  datetime: number
+}
+
+async function fetchMarketNews(): Promise<string[]> {
+  try {
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), 3000)
+    const res = await fetch(
+      'https://finnhub.io/api/v1/news?category=general&minId=0&token=' +
+      process.env.FINNHUB_API_KEY,
+      { signal: controller.signal },
+    )
+    const data = (await res.json()) as FinnhubNewsItem[]
+    if (!Array.isArray(data)) return []
+    return data.slice(0, 5).map((item) => {
+      const hoursAgo = Math.round((Date.now() - item.datetime * 1000) / (1000 * 60 * 60))
+      return `"${item.headline}" — ${hoursAgo}h ago`
+    })
+  } catch {
+    return []
+  }
+}
+
 // ─── Chart analysis cache ─────────────────────────────────────────────────────
 // Keyed by a lightweight hash of the base64 image — avoids re-calling the
 // vision API when Rajesh uploads the same screenshot twice in a session.
@@ -41,6 +75,7 @@ export interface MarketSnapshot {
   wtiPrice:      number | null
   wtiTimestamp:  string | null
   fetchedAt:     string
+  newsHeadlines: string[]
 }
 
 export interface DecoderAnalysis {
@@ -181,10 +216,15 @@ function fmt(n: number | null, decimals = 2): string {
   return n != null ? n.toFixed(decimals) : 'unavailable'
 }
 
-function buildMarketContext(s: MarketSnapshot): string {
+function buildMarketContext(s: MarketSnapshot, headlines: string[]): string {
   const oil = s.wtiPrice != null
     ? `$${s.wtiPrice}/barrel (live, ~5min delay)`
     : 'unavailable'
+
+  const newsSection = headlines.length > 0
+    ? `\nRECENT MARKET NEWS (last 24h, fetched live):\n` +
+      headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')
+    : '\nRECENT MARKET NEWS: unavailable'
 
   return `LIVE MARKET DATA (fetched at ${s.fetchedAt}):
 Currency Rates:
@@ -197,7 +237,7 @@ Currency Rates:
 Commodity:
 - WTI Crude Oil: ${oil}
 
-Context: India imports ~85% of its oil. Every $10 rise in crude increases India's import bill by ~$15 billion/year, putting depreciation pressure on INR.`
+Context: India imports ~85% of its oil. Every $10 rise in crude increases India's import bill by ~$15 billion/year, putting depreciation pressure on INR.${newsSection}`
 }
 
 // ─── System prompt ────────────────────────────────────────────────────────────
@@ -214,6 +254,8 @@ REASONING PROCESS — think through these steps before answering:
 - How confident are you given the headline's specificity?
 - What does the live market data tell you about current positioning?
 - Which analogy from Rajesh's three worlds best fits this concept — electrical/energy (load curves, transformers, voltage spikes), sales & marketing (pipeline buildup, pricing power, territory expansion), or global affairs (trade wars, sanctions, supply chain disruptions)? Pick the one that makes the mechanism clearest. Do not default to electrical every time.
+
+IMPORTANT: You have access to recent market news headlines fetched right now. Use them to ground your analysis in current events. If the news contradicts what you might assume from training data, trust the news. Always check if any headline is directly relevant to the user's headline before answering.
 
 FEW-SHOT EXAMPLES:
 
@@ -429,27 +471,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'GROQ_API_KEY is not configured on the server' })
   }
 
-  // ── Step 1: fetch live market data in parallel, fail gracefully ─────────────
+  // ── Step 1: fetch live market data + news in parallel, fail gracefully ───────
 
-  const [fxUsd, fxEur, wtiPrice] = await Promise.all([
+  const [fxUsd, fxEur, wtiPrice, freshNews] = await Promise.all([
     fetchFrankfurterUsd().catch((): Partial<MarketSnapshot> => ({})),
     fetchFrankfurterEur().catch((): Partial<MarketSnapshot> => ({})),
     fetchWTIPrice().catch((): number | null => wtiCache.price),
+    Date.now() - newsCache.timestamp > NEWS_CACHE_TTL
+      ? fetchMarketNews()
+      : Promise.resolve(null),
   ])
 
+  if (freshNews && freshNews.length > 0) {
+    newsCache = { headlines: freshNews, timestamp: Date.now() }
+  }
+  const headlines = newsCache.headlines
+
   const snapshot: MarketSnapshot = {
-    usdInr:       fxUsd.usdInr   ?? null,
-    eurUsd:       fxEur.eurUsd   ?? null,
-    usdJpy:       fxUsd.usdJpy   ?? null,
-    usdCad:       fxUsd.usdCad   ?? null,
-    usdAud:       fxUsd.usdAud   ?? null,
-    wtiPrice:     wtiPrice        ?? null,
-    wtiTimestamp: wtiCache.wtiTimestamp,
-    fetchedAt:    new Date().toISOString(),
+    usdInr:        fxUsd.usdInr   ?? null,
+    eurUsd:        fxEur.eurUsd   ?? null,
+    usdJpy:        fxUsd.usdJpy   ?? null,
+    usdCad:        fxUsd.usdCad   ?? null,
+    usdAud:        fxUsd.usdAud   ?? null,
+    wtiPrice:      wtiPrice        ?? null,
+    wtiTimestamp:  wtiCache.wtiTimestamp,
+    fetchedAt:     new Date().toISOString(),
+    newsHeadlines: headlines,
   }
 
   // ── Step 2: build grounded context ─────────────────────────────────────────
-  const marketContext = buildMarketContext(snapshot)
+  const marketContext = buildMarketContext(snapshot, headlines)
 
   // ── Step 3: call Groq ───────────────────────────────────────────────────────
   let groqRes: Response
