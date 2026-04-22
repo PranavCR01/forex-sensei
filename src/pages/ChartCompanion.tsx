@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
-import type { ChartAnalysis } from '../../api/ai'
+import { Clock } from 'lucide-react'
+import type { ChartAnalysis, ChartVisionResponse } from '../../api/ai'
 import type { JournalPrefill } from '@/App'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -30,7 +31,7 @@ const TIPS = [
 ]
 
 interface ApiError { error: string }
-function isError(r: ChartAnalysis | ApiError): r is ApiError { return 'error' in r }
+function isError(r: ChartVisionResponse | ApiError): r is ApiError { return 'error' in r }
 
 function toBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -49,11 +50,11 @@ interface Props {
 }
 
 export function ChartCompanion({ onSaveToJournal }: Props) {
-  const [file, setFile]       = useState<File | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [result, setResult]   = useState<ChartAnalysis | null>(null)
-  const [error, setError]     = useState('')
+  const [file, setFile]         = useState<File | null>(null)
+  const [preview, setPreview]   = useState<string | null>(null)
+  const [loading, setLoading]   = useState(false)
+  const [result, setResult]     = useState<ChartVisionResponse | null>(null)
+  const [error, setError]       = useState('')
   const [dragOver, setDragOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -101,7 +102,7 @@ export function ChartCompanion({ onSaveToJournal }: Props) {
         return
       }
 
-      const data = (await res.json()) as ChartAnalysis | ApiError
+      const data = (await res.json()) as ChartVisionResponse | ApiError
       isError(data) ? setError(data.error) : setResult(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Network error')
@@ -112,12 +113,16 @@ export function ChartCompanion({ onSaveToJournal }: Props) {
 
   function handleSave() {
     if (!result) return
+    const a: ChartAnalysis = result.analysis
     onSaveToJournal({
-      pair:      result.pair,
-      direction: biasToTrade[result.bias] ?? 'long',
-      reasoning: `${result.pattern} on ${result.pair} ${result.timeframe}: ${result.pattern_simple} Watch: ${result.what_to_watch}`,
+      pair:      a.pair,
+      direction: biasToTrade[a.bias] ?? 'long',
+      reasoning: `${a.pattern} on ${a.pair} ${a.timeframe}: ${a.pattern_simple} Watch: ${a.what_to_watch}`,
     })
   }
+
+  const a = result?.analysis
+  const rl = result?.rateLimitInfo
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -186,21 +191,27 @@ export function ChartCompanion({ onSaveToJournal }: Props) {
 
       {error && <p className="text-sm text-red-600">Error: {error}</p>}
 
-      {result && (
+      {a && result && (
         <Card>
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center gap-2">
-              <CardTitle className="text-base">{result.pattern}</CardTitle>
-              <Badge variant="outline" className={biasClass[result.bias] ?? fallbackClass}>
-                {result.bias.charAt(0).toUpperCase() + result.bias.slice(1)}
+              <CardTitle className="text-base">{a.pattern}</CardTitle>
+              <Badge variant="outline" className={biasClass[a.bias] ?? fallbackClass}>
+                {a.bias.charAt(0).toUpperCase() + a.bias.slice(1)}
               </Badge>
-              <Badge variant="outline" className={confidenceClass[result.confidence] ?? fallbackClass}>
-                {result.confidence.charAt(0).toUpperCase() + result.confidence.slice(1)} confidence
+              <Badge variant="outline" className={confidenceClass[a.confidence] ?? fallbackClass}>
+                {a.confidence.charAt(0).toUpperCase() + a.confidence.slice(1)} confidence
               </Badge>
+              {result.fromCache && (
+                <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-50 flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  Cached result
+                </Badge>
+              )}
             </div>
-            {(result.pair !== 'Unknown' || result.timeframe) && (
+            {(a.pair !== 'Unknown' || a.timeframe) && (
               <p className="text-xs text-muted-foreground mt-1">
-                {[result.pair !== 'Unknown' ? result.pair : null, result.timeframe || null]
+                {[a.pair !== 'Unknown' ? a.pair : null, a.timeframe || null]
                   .filter(Boolean)
                   .join(' · ')}
               </p>
@@ -213,23 +224,23 @@ export function ChartCompanion({ onSaveToJournal }: Props) {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                 What this means
               </p>
-              <p className="text-sm text-foreground leading-relaxed">{result.pattern_simple}</p>
+              <p className="text-sm text-foreground leading-relaxed">{a.pattern_simple}</p>
             </div>
 
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                 Current price action
               </p>
-              <p className="text-sm text-muted-foreground">{result.current_price_action}</p>
+              <p className="text-sm text-muted-foreground">{a.current_price_action}</p>
             </div>
 
-            {result.key_levels.length > 0 && (
+            {a.key_levels.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                   Key levels
                 </p>
                 <ul className="space-y-1">
-                  {result.key_levels.map((level) => (
+                  {a.key_levels.map((level) => (
                     <li key={level} className="text-sm text-muted-foreground flex gap-2">
                       <span className="text-border">–</span>
                       {level}
@@ -243,16 +254,27 @@ export function ChartCompanion({ onSaveToJournal }: Props) {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
                 Watch next
               </p>
-              <p className="text-sm text-muted-foreground">{result.what_to_watch}</p>
+              <p className="text-sm text-muted-foreground">{a.what_to_watch}</p>
             </div>
 
-            <p className="text-xs text-muted-foreground/60 italic">{result.disclaimer}</p>
+            <p className="text-xs text-muted-foreground/60 italic">{a.disclaimer}</p>
 
             <Button variant="outline" size="sm" onClick={handleSave}>
               Save insight to Journal
             </Button>
           </CardContent>
         </Card>
+      )}
+
+      {/* Rate limit warning — shown below the card */}
+      {rl && rl.requestsRemaining < 50 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-800">
+            Heads up — you have <strong>{rl.requestsRemaining}</strong> chart{' '}
+            {rl.requestsRemaining === 1 ? 'analysis' : 'analyses'} remaining today.
+            Resets at midnight UTC (5:30 AM IST).
+          </p>
+        </div>
       )}
     </div>
   )

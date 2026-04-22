@@ -14,6 +14,22 @@ let wtiCache: { price: number | null; wtiTimestamp: string | null; timestamp: nu
 }
 const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 
+// ─── Chart analysis cache ─────────────────────────────────────────────────────
+// Keyed by a lightweight hash of the base64 image — avoids re-calling the
+// vision API when Rajesh uploads the same screenshot twice in a session.
+
+const chartCache = new Map<string, { result: ChartAnalysis; timestamp: number }>()
+const CHART_CACHE_TTL = 10 * 60 * 1000  // 10 minutes
+
+function hashImage(b64: string): string {
+  const step = Math.floor(b64.length / 100)
+  let hash = 0
+  for (let i = 0; i < 100; i++) {
+    hash = (hash * 31 + b64.charCodeAt(i * step)) & 0xffffffff
+  }
+  return hash.toString(36)
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface MarketSnapshot {
@@ -63,6 +79,18 @@ export interface ChartAnalysis {
   what_to_watch:        string
   confidence:           'high' | 'medium' | 'low'
   disclaimer:           string
+}
+
+export interface RateLimitInfo {
+  requestsRemaining: number
+  tokensRemaining:   number
+  resetIn:           string | null
+}
+
+export interface ChartVisionResponse {
+  analysis:       ChartAnalysis
+  fromCache:      boolean
+  rateLimitInfo?: RateLimitInfo
 }
 
 interface GroqChoice {
@@ -185,7 +213,7 @@ REASONING PROCESS — think through these steps before answering:
 - Is the effect bullish or bearish on USD, INR, or both?
 - How confident are you given the headline's specificity?
 - What does the live market data tell you about current positioning?
-- What analogy from energy infrastructure would help him understand?
+- Which analogy from Rajesh's three worlds best fits this concept — electrical/energy (load curves, transformers, voltage spikes), sales & marketing (pipeline buildup, pricing power, territory expansion), or global affairs (trade wars, sanctions, supply chain disruptions)? Pick the one that makes the mechanism clearest. Do not default to electrical every time.
 
 FEW-SHOT EXAMPLES:
 
@@ -223,7 +251,7 @@ Now analyze the headline given by the user using the live market data provided. 
   "direction": "bullish | bearish | neutral",
   "confidence": "high | medium | low",
   "summary": "2-3 sentences, plain language, references live rates",
-  "macro_link": "1 sentence using energy/infrastructure analogy",
+  "macro_link": "1 sentence using the most fitting analogy from Rajesh's world — electrical/energy, sales/marketing, or global affairs — whichever makes this clearest",
   "what_to_watch": "1 concrete thing to monitor next"
 }`
 
@@ -236,7 +264,7 @@ Analyze the forex chart screenshot provided. Respond in this exact JSON format:
   "pair": "currency pair if visible e.g. USD/INR, or 'Unknown'",
   "timeframe": "timeframe if visible e.g. '1H', '4H', 'Daily', or ''",
   "pattern": "name of the chart pattern e.g. 'Support and Resistance', 'Uptrend', 'Head and Shoulders'",
-  "pattern_simple": "explain the pattern in one sentence as if explaining to someone who understands electrical load curves but not candlesticks",
+  "pattern_simple": "explain the pattern in one sentence using the most fitting analogy from Rajesh's three worlds — electrical/energy (load curves, transformers, voltage spikes), sales & marketing (pipeline buildup, demand cycles, territory expansion), or global affairs (trade wars, sanctions, supply chain disruptions) — pick whichever makes this pattern clearest, do not always default to electrical",
   "current_price_action": "what is price doing right now in the chart",
   "key_levels": ["level 1 description", "level 2 description"],
   "bias": "bullish | bearish | neutral",
@@ -258,7 +286,10 @@ function parseChartJson(raw: string): ChartAnalysis {
   return JSON.parse(stripped.slice(jsonStart, jsonEnd + 1)) as ChartAnalysis
 }
 
-async function callGroqVision(image: string, mimeType: string): Promise<ChartAnalysis> {
+async function callGroqVision(
+  image: string,
+  mimeType: string,
+): Promise<{ analysis: ChartAnalysis; rateLimitInfo: RateLimitInfo }> {
   const groqKey = process.env.GROQ_API_KEY
   if (!groqKey) throw new Error('GROQ_API_KEY is not configured on the server')
 
@@ -282,6 +313,12 @@ async function callGroqVision(image: string, mimeType: string): Promise<ChartAna
     }),
   })
 
+  const rateLimitInfo: RateLimitInfo = {
+    requestsRemaining: parseInt(res.headers.get('x-ratelimit-remaining-requests') ?? '999'),
+    tokensRemaining:   parseInt(res.headers.get('x-ratelimit-remaining-tokens')   ?? '999'),
+    resetIn:           res.headers.get('x-ratelimit-reset-tokens'),
+  }
+
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Groq vision returned ${res.status}: ${text.slice(0, 200)}`)
@@ -290,7 +327,7 @@ async function callGroqVision(image: string, mimeType: string): Promise<ChartAna
   const data    = (await res.json()) as GroqApiResponse
   const content = data.choices[0]?.message?.content ?? ''
   if (!content) throw new Error('Empty response from Groq vision')
-  return parseChartJson(content)
+  return { analysis: parseChartJson(content), rateLimitInfo }
 }
 
 async function handleGeminiVision(
@@ -298,8 +335,24 @@ async function handleGeminiVision(
   res: VercelResponse,
 ): Promise<VercelResponse> {
   const { image, mimeType } = req.body as { image: string; mimeType: string }
-  const geminiKey = process.env.GEMINI_API_KEY
 
+  // ── Evict stale cache entries ───────────────────────────────────────────────
+  const now = Date.now()
+  for (const [key, entry] of chartCache) {
+    if (now - entry.timestamp > CHART_CACHE_TTL) chartCache.delete(key)
+  }
+
+  // ── Cache hit ───────────────────────────────────────────────────────────────
+  const cacheKey = hashImage(image)
+  const cached   = chartCache.get(cacheKey)
+  if (cached) {
+    console.log('[ai] Chart cache hit')
+    const response: ChartVisionResponse = { analysis: cached.result, fromCache: true }
+    return res.status(200).json(response)
+  }
+
+  // ── Try Gemini ──────────────────────────────────────────────────────────────
+  const geminiKey = process.env.GEMINI_API_KEY
   if (geminiKey) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`
     const parts: GeminiPart[] = [
@@ -327,7 +380,9 @@ async function handleGeminiVision(
       const content = data.candidates[0]?.content?.parts[0]?.text ?? ''
       try {
         const analysis = parseChartJson(content)
-        return res.status(200).json(analysis)
+        chartCache.set(cacheKey, { result: analysis, timestamp: now })
+        const response: ChartVisionResponse = { analysis, fromCache: false }
+        return res.status(200).json(response)
       } catch (err) {
         console.error('[ai] Gemini JSON parse failed, falling back to Groq vision:', err)
       }
@@ -338,10 +393,12 @@ async function handleGeminiVision(
     console.log('[ai] No GEMINI_API_KEY — using Groq vision directly')
   }
 
-  // Groq vision fallback
+  // ── Groq vision fallback ────────────────────────────────────────────────────
   try {
-    const analysis = await callGroqVision(image, mimeType)
-    return res.status(200).json(analysis)
+    const { analysis, rateLimitInfo } = await callGroqVision(image, mimeType)
+    chartCache.set(cacheKey, { result: analysis, timestamp: now })
+    const response: ChartVisionResponse = { analysis, fromCache: false, rateLimitInfo }
+    return res.status(200).json(response)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Vision analysis failed'
     console.error('[ai] Groq vision fallback failed:', msg)
