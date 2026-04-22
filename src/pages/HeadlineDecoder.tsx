@@ -163,7 +163,7 @@ export function HeadlineDecoder({ onSaveToJournal }: Props) {
                       ? <ChevronUp className="h-3 w-3" />
                       : <ChevronDown className="h-3 w-3" />
                     }
-                    News context used ({m.newsHeadlines.length} headlines)
+                    News context used ({m.newsHeadlines.length} headlines from Finnhub + NewsData.io)
                   </button>
                   {newsExpanded && (
                     <ol className="mt-2 space-y-1 pl-1">

@@ -48,6 +48,69 @@ async function fetchMarketNews(): Promise<string[]> {
   }
 }
 
+// ─── Targeted news cache ─────────────────────────────────────────────────────
+// Keyed by headline hash — each unique headline gets its own targeted search.
+// 30-min TTL: longer than Finnhub since the search is query-specific.
+
+const targetedNewsCache = new Map<string, { headlines: string[]; timestamp: number }>()
+const TARGETED_NEWS_TTL = 30 * 60 * 1000
+
+function hashHeadline(text: string): string {
+  let hash = 0
+  for (let i = 0; i < text.length; i++) {
+    hash = (hash * 31 + text.charCodeAt(i)) & 0xffffffff
+  }
+  return hash.toString(36)
+}
+
+interface NewsDataItem {
+  title:   string
+  pubDate: string
+}
+
+interface NewsDataResponse {
+  results?: NewsDataItem[]
+}
+
+async function fetchTargetedNews(headline: string): Promise<string[]> {
+  try {
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), 3000)
+    const key      = process.env.NEWSDATA_API_KEY
+    const keyTerms = headline.split(' ').slice(0, 5).join(' ')
+
+    const [headlineSearch, indiaSearch] = await Promise.all([
+      fetch(
+        'https://newsdata.io/api/1/news?apikey=' + key +
+        '&q=' + encodeURIComponent(keyTerms) +
+        '&language=en&size=3',
+        { signal: controller.signal },
+      ).then(r => r.json() as Promise<NewsDataResponse>).catch((): NewsDataResponse => ({ results: [] })),
+
+      fetch(
+        'https://newsdata.io/api/1/news?apikey=' + key +
+        '&q=' + encodeURIComponent('India rupee RBI forex') +
+        '&language=en&size=3',
+        { signal: controller.signal },
+      ).then(r => r.json() as Promise<NewsDataResponse>).catch((): NewsDataResponse => ({ results: [] })),
+    ])
+
+    const format = (item: NewsDataItem): string => {
+      const hoursAgo = Math.round(
+        (Date.now() - new Date(item.pubDate).getTime()) / (1000 * 60 * 60),
+      )
+      return `"${item.title}" — ${hoursAgo}h ago [NewsData]`
+    }
+
+    return [
+      ...(headlineSearch.results ?? []).slice(0, 3).map(format),
+      ...(indiaSearch.results   ?? []).slice(0, 3).map(format),
+    ]
+  } catch {
+    return []
+  }
+}
+
 // ─── Chart analysis cache ─────────────────────────────────────────────────────
 // Keyed by a lightweight hash of the base64 image — avoids re-calling the
 // vision API when Rajesh uploads the same screenshot twice in a session.
@@ -222,7 +285,7 @@ function buildMarketContext(s: MarketSnapshot, headlines: string[]): string {
     : 'unavailable'
 
   const newsSection = headlines.length > 0
-    ? `\nRECENT MARKET NEWS (last 24h, fetched live):\n` +
+    ? `\nRECENT MARKET NEWS (merged from general + India-specific sources):\n` +
       headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')
     : '\nRECENT MARKET NEWS: unavailable'
 
@@ -255,7 +318,7 @@ REASONING PROCESS — think through these steps before answering:
 - What does the live market data tell you about current positioning?
 - Which analogy from Rajesh's three worlds best fits this concept — electrical/energy (load curves, transformers, voltage spikes), sales & marketing (pipeline buildup, pricing power, territory expansion), or global affairs (trade wars, sanctions, supply chain disruptions)? Pick the one that makes the mechanism clearest. Do not default to electrical every time.
 
-IMPORTANT: You have access to recent market news headlines fetched right now. Use them to ground your analysis in current events. If the news contradicts what you might assume from training data, trust the news. Always check if any headline is directly relevant to the user's headline before answering.
+IMPORTANT: You have access to recent market news from two sources: general financial news (Finnhub) and India/forex-specific news (NewsData.io). Headlines marked [NewsData] are specifically relevant to India macro and forex markets — weight these more heavily when the user's headline involves India, RBI, rupee, or trade policy. Always prefer recent news over training data assumptions.
 
 FEW-SHOT EXAMPLES:
 
@@ -473,19 +536,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── Step 1: fetch live market data + news in parallel, fail gracefully ───────
 
-  const [fxUsd, fxEur, wtiPrice, freshNews] = await Promise.all([
+  const targetedCacheKey  = hashHeadline(headline)
+  const cachedTargeted    = targetedNewsCache.get(targetedCacheKey)
+  const needsTargetedFetch = !cachedTargeted || Date.now() - cachedTargeted.timestamp > TARGETED_NEWS_TTL
+
+  const [fxUsd, fxEur, wtiPrice, freshNews, freshTargeted] = await Promise.all([
     fetchFrankfurterUsd().catch((): Partial<MarketSnapshot> => ({})),
     fetchFrankfurterEur().catch((): Partial<MarketSnapshot> => ({})),
     fetchWTIPrice().catch((): number | null => wtiCache.price),
-    Date.now() - newsCache.timestamp > NEWS_CACHE_TTL
-      ? fetchMarketNews()
-      : Promise.resolve(null),
+    Date.now() - newsCache.timestamp > NEWS_CACHE_TTL ? fetchMarketNews()         : Promise.resolve(null),
+    needsTargetedFetch                                ? fetchTargetedNews(headline) : Promise.resolve(null),
   ])
 
-  if (freshNews && freshNews.length > 0) {
-    newsCache = { headlines: freshNews, timestamp: Date.now() }
-  }
-  const headlines = newsCache.headlines
+  if (freshNews     && freshNews.length     > 0) newsCache = { headlines: freshNews, timestamp: Date.now() }
+  if (freshTargeted && freshTargeted.length > 0) targetedNewsCache.set(targetedCacheKey, { headlines: freshTargeted, timestamp: Date.now() })
+
+  const targetedHeadlines = targetedNewsCache.get(targetedCacheKey)?.headlines ?? []
+  const allHeadlines = [
+    ...newsCache.headlines.map(h => h + ' [Finnhub]'),
+    ...targetedHeadlines,
+  ]
 
   const snapshot: MarketSnapshot = {
     usdInr:        fxUsd.usdInr   ?? null,
@@ -496,11 +566,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     wtiPrice:      wtiPrice        ?? null,
     wtiTimestamp:  wtiCache.wtiTimestamp,
     fetchedAt:     new Date().toISOString(),
-    newsHeadlines: headlines,
+    newsHeadlines: allHeadlines,
   }
 
   // ── Step 2: build grounded context ─────────────────────────────────────────
-  const marketContext = buildMarketContext(snapshot, headlines)
+  const marketContext = buildMarketContext(snapshot, allHeadlines)
 
   // ── Step 3: call Groq ───────────────────────────────────────────────────────
   let groqRes: Response
