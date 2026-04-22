@@ -59,7 +59,7 @@ export function Dashboard() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Good day, Pranav.
+          Good day, Rajesh.
         </h1>
         <p className="text-sm text-muted-foreground mt-1">{formatToday()}</p>
       </div>
@@ -82,6 +82,21 @@ export function Dashboard() {
           </Card>
         ))}
       </div>
+
+      <Card className="border-dashed">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Quick Guide
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground space-y-1">
+          <p><span className="text-foreground font-medium">Journal</span> — log every trade idea before you enter. Write your reasoning.</p>
+          <p><span className="text-foreground font-medium">Decoder</span> — paste any news headline to see how it affects the rupee.</p>
+          <p><span className="text-foreground font-medium">Performance</span> — close trades and track your win rate over time.</p>
+          <p><span className="text-foreground font-medium">Charts</span> — upload a Kite screenshot; AI explains the pattern in plain language.</p>
+          <p className="pt-1 text-xs">Click <span className="text-foreground font-medium">Guided Tour</span> in the nav bar for a full walkthrough.</p>
+        </CardContent>
+      </Card>
     </div>
   )
 }

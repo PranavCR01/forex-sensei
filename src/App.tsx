@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { PinGate } from '@/components/PinGate'
 import { Layout } from '@/components/Layout'
+import { OnboardingTour } from '@/components/OnboardingTour'
 import { Dashboard } from '@/pages/Dashboard'
 import { Journal } from '@/pages/Journal'
 import { HeadlineDecoder } from '@/pages/HeadlineDecoder'
@@ -21,6 +22,9 @@ export default function App() {
   )
   const [page, setPage] = useState<Page>('dashboard')
   const [journalPrefill, setJournalPrefill] = useState<JournalPrefill | null>(null)
+  const [showTour, setShowTour] = useState(
+    () => localStorage.getItem('tourCompleted') !== 'true'
+  )
 
   function handleSaveToJournal(prefill: JournalPrefill) {
     setJournalPrefill(prefill)
@@ -32,7 +36,8 @@ export default function App() {
   }
 
   return (
-    <Layout currentPage={page} onNavigate={setPage}>
+    <Layout currentPage={page} onNavigate={setPage} onStartTour={() => setShowTour(true)}>
+      {showTour && <OnboardingTour onComplete={() => setShowTour(false)} />}
       {page === 'dashboard' && <Dashboard />}
       {page === 'journal' && (
         <Journal

@@ -3,6 +3,7 @@ import type { Page } from '@/App'
 interface Props {
   currentPage: Page
   onNavigate: (page: Page) => void
+  onStartTour: () => void
   children: React.ReactNode
 }
 
@@ -14,7 +15,7 @@ const navItems: { label: string; page: Page }[] = [
   { label: 'Charts',      page: 'charts'      },
 ]
 
-export function Layout({ currentPage, onNavigate, children }: Props) {
+export function Layout({ currentPage, onNavigate, onStartTour, children }: Props) {
   function signOut() {
     sessionStorage.removeItem('authed')
     window.location.reload()
@@ -32,6 +33,7 @@ export function Layout({ currentPage, onNavigate, children }: Props) {
               {navItems.map(({ label, page }) => (
                 <button
                   key={page}
+                  data-tour={page}
                   onClick={() => onNavigate(page)}
                   className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
                     currentPage === page
@@ -44,12 +46,21 @@ export function Layout({ currentPage, onNavigate, children }: Props) {
               ))}
             </nav>
           </div>
-          <button
-            onClick={signOut}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Sign out
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              data-tour="guided-tour"
+              onClick={onStartTour}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors border border-border rounded-md px-2.5 py-1"
+            >
+              Guided Tour
+            </button>
+            <button
+              onClick={signOut}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
