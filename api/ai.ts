@@ -17,7 +17,12 @@ const CACHE_TTL = 5 * 60 * 1000  // 5 minutes
 // ─── News cache ───────────────────────────────────────────────────────────────
 // 15-min TTL — news changes often enough that stale data misleads the model.
 
-let newsCache: { headlines: string[]; timestamp: number } = {
+interface NewsHeadline {
+  text:     string
+  hoursAgo: number
+}
+
+let newsCache: { headlines: NewsHeadline[]; timestamp: number } = {
   headlines: [],
   timestamp: 0,
 }
@@ -28,7 +33,7 @@ interface FinnhubNewsItem {
   datetime: number
 }
 
-async function fetchMarketNews(): Promise<string[]> {
+async function fetchMarketNews(): Promise<NewsHeadline[]> {
   try {
     const controller = new AbortController()
     setTimeout(() => controller.abort(), 3000)
@@ -41,7 +46,7 @@ async function fetchMarketNews(): Promise<string[]> {
     if (!Array.isArray(data)) return []
     return data.slice(0, 5).map((item) => {
       const hoursAgo = Math.round((Date.now() - item.datetime * 1000) / (1000 * 60 * 60))
-      return `"${item.headline}" — ${hoursAgo}h ago`
+      return { text: `"${item.headline}" — ${hoursAgo}h ago [Finnhub]`, hoursAgo }
     })
   } catch {
     return []
@@ -52,7 +57,7 @@ async function fetchMarketNews(): Promise<string[]> {
 // Keyed by headline hash — each unique headline gets its own targeted search.
 // 30-min TTL: longer than Finnhub since the search is query-specific.
 
-const targetedNewsCache = new Map<string, { headlines: string[]; timestamp: number }>()
+const targetedNewsCache = new Map<string, { headlines: NewsHeadline[]; timestamp: number }>()
 const TARGETED_NEWS_TTL = 30 * 60 * 1000
 
 function hashHeadline(text: string): string {
@@ -72,7 +77,7 @@ interface NewsDataResponse {
   results?: NewsDataItem[]
 }
 
-async function fetchTargetedNews(headline: string): Promise<string[]> {
+async function fetchTargetedNews(headline: string): Promise<NewsHeadline[]> {
   try {
     const controller = new AbortController()
     setTimeout(() => controller.abort(), 3000)
@@ -95,11 +100,11 @@ async function fetchTargetedNews(headline: string): Promise<string[]> {
       ).then(r => r.json() as Promise<NewsDataResponse>).catch((): NewsDataResponse => ({ results: [] })),
     ])
 
-    const format = (item: NewsDataItem): string => {
+    const format = (item: NewsDataItem): NewsHeadline => {
       const hoursAgo = Math.round(
         (Date.now() - new Date(item.pubDate).getTime()) / (1000 * 60 * 60),
       )
-      return `"${item.title}" — ${hoursAgo}h ago [NewsData]`
+      return { text: `"${item.title}" — ${hoursAgo}h ago [NewsData]`, hoursAgo }
     }
 
     return [
@@ -318,7 +323,7 @@ REASONING PROCESS — think through these steps before answering:
 - What does the live market data tell you about current positioning?
 - Which analogy from Rajesh's three worlds best fits this concept — electrical/energy (load curves, transformers, voltage spikes), sales & marketing (pipeline buildup, pricing power, territory expansion), or global affairs (trade wars, sanctions, supply chain disruptions)? Pick the one that makes the mechanism clearest. Do not default to electrical every time.
 
-IMPORTANT: You have access to recent market news from two sources: general financial news (Finnhub) and India/forex-specific news (NewsData.io). Headlines marked [NewsData] are specifically relevant to India macro and forex markets — weight these more heavily when the user's headline involves India, RBI, rupee, or trade policy. Always prefer recent news over training data assumptions.
+IMPORTANT: You have access to recent market news from two sources: general financial news (Finnhub) and India/forex-specific news (NewsData.io). Headlines marked [NewsData] are specifically relevant to India macro and forex markets — weight these more heavily when the user's headline involves India, RBI, rupee, or trade policy. Always prefer recent news over training data assumptions. Headlines are sorted newest first. Weight recent headlines (under 6 hours old) significantly more than older ones (24h+) for fast-moving situations like tariffs, rate decisions, and geopolitical events. A headline from 2 hours ago reflects current reality better than one from 28 hours ago — treat older headlines as background context only, not as current ground truth.
 
 FEW-SHOT EXAMPLES:
 
@@ -553,9 +558,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const targetedHeadlines = targetedNewsCache.get(targetedCacheKey)?.headlines ?? []
   const allHeadlines = [
-    ...newsCache.headlines.map(h => h + ' [Finnhub]'),
+    ...newsCache.headlines,
     ...targetedHeadlines,
   ]
+    .sort((a, b) => a.hoursAgo - b.hoursAgo)
+    .filter(h => h.hoursAgo <= 48)
+    .map(h => h.text)
 
   const snapshot: MarketSnapshot = {
     usdInr:        fxUsd.usdInr   ?? null,
