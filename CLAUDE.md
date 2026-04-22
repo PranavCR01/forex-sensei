@@ -127,11 +127,12 @@ USD/INR (primary), EUR/USD, USD/JPY, GBP/USD, AUD/USD, USD/CAD, XAU/USD
 | 2026-04-21 | News grounding v2: Added NewsData.io targeted search alongside Finnhub. fetchTargetedNews() runs two parallel searches per decode — user's headline keywords (first 5 words) + fixed "India rupee RBI forex" query. 30-min per-headline cache keyed by hashHeadline(). Merged into one allHeadlines array with [Finnhub]/[NewsData] source labels. SYSTEM_PROMPT IMPORTANT updated to weight [NewsData] more for India-specific topics. |
 | 2026-04-21 | News grounding v3 (temporal weighting): Fetch functions now return { text, hoursAgo } objects. Merged array sorted ascending by hoursAgo (newest first in prompt), filtered to hoursAgo <= 48 (stale news dropped). SYSTEM_PROMPT instructs Groq to weight <6h headlines heavily and treat 24h+ as background context only. NEWSDATA_API_KEY and FINNHUB_API_KEY added to Vercel env vars. |
 | 2026-04-21 | Onboarding tour: intro.js installed, CSS imported in index.css, OnboardingTour.tsx (8 steps, all 5 sections, auto-start on first login via localStorage flag, skip/exit marks complete). Layout.tsx: data-tour attrs on all nav buttons + "Guided Tour" button (replay). App.tsx: showTour state lazy-initialized from localStorage. Dashboard.tsx: greeting fixed to "Rajesh", Quick Guide refresher card added. Build clean, pushed to GitHub. |
+| 2026-04-21 | Final polish: SVG candlestick logo (#0F766E) added to nav bar and PinGate. analytics.ts: logEvent() writes to Supabase events table (fail-silent). Events wired — trade_logged, trade_closed, headline_decoded, chart_uploaded, tour_started, tour_completed, page_viewed. CloseTradeForm gains pair+direction props. README replaces Vite boilerplate. Build clean, pushed. |
 
 ---
 
 ## Current Status
-**All 4 slices complete + onboarding tour live. App fully ready for Rajesh. Optional Slice 5: weekly AI insight report.**
+**App complete. Logo added. Analytics live. README written. Ready for Rajesh.**
 
 **Tech debt:**
 - Move shared AI types from `api/ai.ts` import into `src/types/ai.ts` (fragile relative path)
