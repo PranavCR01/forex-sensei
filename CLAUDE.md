@@ -31,6 +31,8 @@
 - [ ] Slice 4: How multimodal AI works — sending image + text together in one API call
 - [ ] Slice 4: FileReader API — browser-native way to read local files as base64, ArrayBuffer, or text
 - [ ] Slice 4: Why base64 — binary data (images) needs text encoding to travel through JSON APIs
+- [ ] News grounding: Why news context matters more than price data for geopolitical/policy headlines
+- [ ] Cache TTL strategy — 15min for news (changes often) vs 5min for prices (changes constantly) vs 10min for charts (user-specific, hash-keyed)
 
 ---
 
@@ -121,11 +123,12 @@ USD/INR (primary), EUR/USD, USD/JPY, GBP/USD, AUD/USD, USD/CAD, XAU/USD
 | 2026-04-21 | Slice 3: CloseTradeForm (expand-in-place, outcome toggle, pips, notes), TradeList updated (Close Trade button, inline form, internalRefresh pattern, exit info on closed cards), Performance page (4 stat cards, recharts BarChart with Cell colors, 3 pattern insights, trade review list with expand-to-compare). recharts v3.8.1 installed. |
 | 2026-04-21 | Slice 4: ChartCompanion.tsx built — drag/drop upload zone, FileReader base64 conversion, Gemini 2.0 Flash vision call via /api/ai (new image branch), result card (pattern, bias, confidence, key levels, what to watch, disclaimer), Save insight to Journal pre-fill. api/ai.ts updated: ChartAnalysis type exported, GeminiApiResponse types added, handleGeminiVision() handler, main handler routes on body.image. Build passes, pushed to GitHub. |
 | 2026-04-21 | Slice 4 polish: (1) 3-world analogy system — both system prompts now instruct model to choose electrical/energy, sales/marketing, or global affairs analogy, not always electrical. (2) 10-min in-memory chart cache keyed by lightweight image hash — evicts stale on each request. (3) Groq rate limit header tracking (requestsRemaining, tokensRemaining, resetIn). (4) Frontend: "Cached result" badge with Clock icon, amber warning when <50 requests remaining. Groq vision model fixed to meta-llama/llama-4-scout-17b-16e-instruct (only vision model available on account). |
+| 2026-04-21 | News grounding: Finnhub general news API integrated. fetchMarketNews() pulls 5 latest headlines with "Nh ago" timestamps, 15-min cache, 3s AbortController. Added to Promise.all alongside FX/WTI (no latency cost). Injected into marketContext and SYSTEM_PROMPT IMPORTANT instruction. MarketSnapshot.newsHeadlines[] added. HeadlineDecoder: collapsible "News context used (N headlines)" toggle with ChevronDown/Up icons. FINNHUB_API_KEY added to .env.local and Vercel env vars needed. |
 
 ---
 
 ## Current Status
-**All 4 slices complete and polished. Optional Slice 5: weekly AI insight report (Gemini synthesises Rajesh's trade patterns into a weekly in-app summary).**
+**All 4 slices complete and polished with live news grounding. Optional Slice 5: weekly AI insight report (Gemini synthesises Rajesh's trade patterns into a weekly in-app summary).**
 
 **Tech debt:**
 - Move shared AI types from `api/ai.ts` import into `src/types/ai.ts` (fragile relative path)
